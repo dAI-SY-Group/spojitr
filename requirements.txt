@@ -1,0 +1,6 @@
+more_itertools
+nltk
+requests
+sqlalchemy
+sklearn
+tqdm

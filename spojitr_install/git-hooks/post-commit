@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+# Post commit wrapper for spojitr. It is required, because
+# the 'real' post commit hook is written in python and
+# probably requires interactive input. To make this work,
+# we have to enable reading from /dev/tty
+#
+# for further information see: https://stackoverflow.com/a/46016718
+
+exec < /dev/tty
+
+# call spojitr post commit hook
+./.git/hooks/post-commit-spojitr.py

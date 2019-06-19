@@ -1,0 +1,253 @@
+= Spojit&#0344; Demonstration
+
+== Introduction
+
+This document describes how **spojit&#0344;** is used and demonstrates its capabilities to create trace links between issues maintained in https://www.atlassian.com/software/jira[Atlassian Jira] and commits in https://git-scm.com[git] repositories.
+The demonstration does not require to install **spojit&#0344;** and is fully operational in a https://www.docker.com/[docker] container.
+This allows to play around and explore **spojit&#0344;** without modifying your development machine.
+
+The commands and interaction with **spojit&#0344;** are exemplified using the open source project https://crunch.apache.org[Apache Crunch], "_a java library to write, test and run MapReduce pipelines_".
+We selected this project based on its moderate size footnote:[For larger projects it may take longer to initially build the local database and train the classifier.] in terms of development artifacts which perfectly fits the purpose of a quick demo.
+The source code of _Crunch_ is hosted on github (https://github.com/apache/crunch) and the issues are hosted on the jira installation of the apache software foundation (https://issues.apache.org/jira/projects/CRUNCH/summary).
+
+
+== Build and start a **spojit&#0344;** docker container
+
+. Clone the **spojit&#0344;** repository to your machine and within a shell navigate to the checkout.
+. Build a **spojit&#0344;** image with `docker build --tag spojitr .` or call the script `docker_build.sh`
+. Start **spojit&#0344;** container with `docker run -it --name spojitr spojitr` or call the script `docker_run.sh`
+
+== Setting up project `crunch` in the docker container
+
+NOTE: See also the youtube video showing these steps: https://youtu.be/-zwN6p4Q0jo?t=150
+
+In the docker container, clone the `crunch` repository from github https://github.com/apache/crunch using the following command:
+
+[source,bash]
+----
+root@3f4c536bd7be:/# cd /root
+root@3f4c536bd7be:~# git clone https://github.com/apache/crunch.git
+----
+
+Enter the directory and initialize **spojit&#0344;**.
+When asked, enter the following configuration parameters
+
+* __Jira project key__ : `CRUNCH`
+* __REST Uri__: `https://issues.apache.org/jira/rest/api/2`
+
+This configures the jira project used to track the issues of `crunch`.
+
+[source,bash]
+----
+root@3f4c536bd7be:~# cd crunch
+root@3f4c536bd7be:~/crunch# spojitr init
+Jira project key, e.g. HADOOP : CRUNCH
+Jira REST URI of hosting server, e.g. https://issues.apache.org/jira/rest/api/2 : https://issues.apache.org/jira/rest/api/2
+Test server connectivity ...
+Success, project CRUNCH has 684 issues.
+Installing post-commit hook ...
+Copied /data/spojitr_install/git-hooks/post-commit to /root/crunch/.git/hooks/post-commit
+Copied /data/spojitr_install/git-hooks/post-commit-spojitr.py to /root/crunch/.git/hooks/post-commit-spojitr.py
+Initialized empty spojitr repository in /root/crunch/.spojitr
+----
+
+Next, initialize the local **spojit&#0344;** database with command `spojitr build-db`.
+This may take about 2 minutes.
+
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# spojitr build-db
+Build database ...
+Fetch git commits ...
+Fetching commits:  93% 1159/1244 [01:44<00:07]
+Fetch jira issues ...
+Fetching issues: 100% 684/684 [00:21<00:00]
+Establishing existing issue to commit links ...
+Linking: 100% 949/949 [00:00<00:00]
+Calculate issue to commit similarity ...
+Calculate issue to commit similarity: 100% 949/949 [00:03<00:00]
+Calculate issue to source code similarity ...
+Calculate issue to source code similarity: 100% 949/949 [00:24<00:00]
+----
+
+Finally, train the classifier on the retrieved data with `spojitr train-model`.
+
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# spojitr train-model
+Training ...
+Training model ...
+----
+
+Now everything is set up for development and you can start modifying the projects' source code and make commits.
+However, since you're (probably)  unfamiliar with project `crunch`, you don't know what to do.
+Therefore we created a couple of demonstrations, that allow you to repeat what the original developers of project `crunch` did in the past.
+Contrary to them, you now can use **spojit&#0344;** for assistance during the commit process.
+
+== Interactive demo of **spojit&#0344;**
+
+To demonstrate the development in the past, we first have to re-create the state of the project back than.
+We decided to use March 1st 2017 as a reference.
+The following script `/data/demo/prepare_demo.py` trains a classifier model based on the artifacts existing at that point in time.
+
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# /data/demo/prepare_demo.py
+========================================
+Setup demo for project "crunch"
+
+   reference training date: 2017-03-01T00:00:00Z
+
+========================================
+Training model ...
+----
+
+We picked **three** commits that were made after the reference time.
+Ror each we recreated the exact state of the git repository as well as the issues that were present in jira at the point in time the commit occurred.
+So we can perform the same `git commit` commands, but this time with the assistance of **spojit&#0344;**.
+For prediction, the classifier uses the trained model from March 1st 2017 you created above.
+To reproduce the experiments, we captured all required setup commands in three shell scripts.
+Each performs the following steps:
+
+. Defining the commit hash we want to simulate, lets call it `abcd1234`
+. Create a _patch_ file using `git patch abcd1234^1..abcd1234` to capture the git repository modifications that were made by the developer to go from revision `abcd1234^1` to `abcd1234`, i.e. our target revision.
+  The `^1` denotes the __parent__ of specified revision footnote:[See also https://git-scm.com/docs/gitrevisions].
+  The patch is saved as `patch_abcd1234.diff` in the `.spojitr/` directory of the project.
+. Create a new branch based on `abcd1234^1` called `demo_branch` and switch to that branch: `git checkout -b demo_branch abcd1234^1`
+. Apply the previously saved patch to this branch: `git apply spojitr/patch_abcd1234.diff`
+. Additionally a file called `demo.json` is placed in `.spojitr/` directory.
+   It is required, so that
+   - Our previously prepared training model at the specific point in time is used to perform predictions instead of the default, i.e. the most recent one.
+   - Modify git author information to match that of the original commit author instead of using your git username and email in the docker container when performing the commit.
+   - Modify system time to match that of the commit, instead of the current system time in the docker container.
+
+NOTE: Once you finished playing around with the three demonstrations, make sure to remove the `.spojitr/demo.json` file. A demo banner is displayed as long as this file is present to inform about this fact.
+
+Now, when running `git commit -a -m "<commit message>"` and providing the **same** `<commit message>` as the developer did, **spojit&#0344;** should assist by picking a jira issue key.
+
+The commands for three different commits are located in `/data/demo` in scripts called `demo_success_1.sh`, `demo_success_2.sh` and `demo_fail.sh`.
+The script `_run_demo.sh` actually performs the required git setup commands.
+
+=== First example
+
+The first example is commit `d5e40e3393b4fb1e2f3c60d158191ec3e81302f8` (see https://github.com/apache/crunch/commit/d5e40e3393b4fb1e2f3c60d158191ec3e81302f8[github link]) which was performed on Apr 10, 2017 using commit message "_Enable numReducers option for Distinct operations._"
+This commit was (presumably manually) linked to issue `CRUNCH-642` (see https://issues.apache.org/jira/browse/CRUNCH-642[jira link]).
+Lets simulate, if **spojit&#0344;** could have done it automatically.
+The script `/data/demo/demo_success_1.sh` performs the required setup steps:
+
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# /data/demo/demo_success_1.sh
+---------------------------------------------------------------------
+* Setting up demo for commit d5e40e3393b4fb1e2f3c60d158191ec3e81302f8
+* The given commit message was
+
+    Enable numReducers option for Distinct operations.
+
+* The commit was linked to issue id CRUNCH-642
+---------------------------------------------------------------------
+Switched to branch 'master'
+Your branch is up to date with 'origin/master'.
+Deleted branch demo_branch (was d4c2b67f).
+Switched to a new branch 'demo_branch'
+----
+
+Use `git status` to see the modifications.
+
+Now perform the commit with `git commit -a -m "Enable numReducers option for Distinct operations."` which uses the same commit message as the developer did.
+
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# git commit -a -m "Enable numReducers option for Distinct operations."
+Last commit message doesn't contain an Jira issue-id.
+Do you want to add an issue id [y/n]? y
+Predicting ...
+Make a choice:
+
+(1) CRUNCH-642     : Enable numReducers option for methods in Distinct
+(2) CRUNCH-637     : crunch.bytes.per.reduce.task cannot be used with GroupingOptions
+(3) CRUNCH-443     : Pipeline#run returns null in some error situations
+
+Enter 1-3 to select an issue id, or 0 to abort: 1
+----
+
+As you see, the **correct jira** issue id is in the top 3 recommendations generated by **spojit&#0344;**.
+Thus we select `1` which looks like the most appropriate one and **spojit&#0344;** adds the respective jira identifier to our commit, as the command `git log -n 1` reveals.
+
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# git log -n 1
+commit 2a8557a23adabb4f60f97810293950474337a13d (HEAD -> demo_branch)
+Author: Spojitr User <user@spojitr.com>
+Date:   Sat Jun 15 19:34:50 2019 +0000
+
+    CRUNCH-642 Enable numReducers option for Distinct operations.
+#   ^
+#   \--------- Added jira identifier
+----
+
+=== Second example
+
+The second example is similar to the <<First example,first>> and uses the following configuration
+
+- Commit hash: `869aac60c9d3b5bef10b4e907ec3840be2d8c20e` (see https://github.com/apache/crunch/commit/869aac60c9d3b5bef10b4e907ec3840be2d8c20e[github link])
+- Commit message: "_Fix .equals and .hashCode for Targets_"
+- Correct jira issue id: `CRUNCH-684` (see https://issues.apache.org/jira/browse/CRUNCH-684[jira link])
+- Setup script: `/data/demo/demo_success_2.sh`
+
+Lets try:
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# /data/demo/demo_success_2.sh
+
+# output skipped
+
+root@3f4c536bd7be:~/crunch# git commit -a -m "Fix .equals and .hashCode for Targets"
+Last commit message doesn't contain an Jira issue-id.
+Do you want to add an issue id [y/n]? y
+Predicting ...
+Make a choice:
+
+(1) CRUNCH-684     : [crunch-hbase] HbaseTarget getting ignored even if configuration is different
+(2) CRUNCH-624     : temporary table size is 0, which makes reducer number too small
+(3) CRUNCH-679     : Improvements for usage of DistCp
+
+Enter 1-3 to select an issue id, or 0 to abort: 1
+[demo_branch 2642dea8] Fix .equals and .hashCode for Targets
+ 4 files changed, 161 insertions(+), 4 deletions(-)
+----
+
+Again, **spojit&#0344;** was able to recommend the correct jira identifier (`CRUNCH-684`).
+
+
+=== Third example (Failure)
+
+However, **spojit&#0344;** is not perfect and thus it is sometimes unable to place the correct jira issue identifier among the top 3 recommendations.
+The third example demonstrates such a case and uses the following configuration:
+
+- Commit hash: `571b90c03e3010e7bb9badf4e6e441ab2164be56` (see https://github.com/apache/crunch/commit/571b90c03e3010e7bb9badf4e6e441ab2164be56[github link])
+- Commit message: "_Avoid unnecessary last modified time retrieval_"
+- Correct jira issue id: `CRUNCH-678` (see https://issues.apache.org/jira/browse/CRUNCH-678[jira link])
+- Setup script: `/data/demo/demo_fail.sh`
+
+Lets run the example:
+[source,bash]
+----
+root@3f4c536bd7be:~/crunch# /data/demo/demo_fail.sh
+
+# output skipped
+
+root@3f4c536bd7be:~/crunch# git commit -a -m "Avoid unnecessary last modified time travel"
+Last commit message doesn't contain an Jira issue-id.
+Do you want to add an issue id [y/n]? y
+Predicting ...
+Make a choice:
+
+(1) CRUNCH-361     : Adjust the planner to handle non-existent SourceTargets
+(2) CRUNCH-510     : PCollection.materialize with Spark should use collect()
+(3) CRUNCH-677     : Support passing FileSystem to File Sources and Targets
+
+Enter 1-3 to select an issue id, or 0 to abort:
+----
+
+As you can see, the correct jira identifier `CRUNCH-678` is not within the top 3 recommendations.
