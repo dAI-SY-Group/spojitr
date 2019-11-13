@@ -38,7 +38,7 @@ PATCH_FILE=/root/crunch/.spojitr/patch_${COMMIT_HASH}.diff
 # the changes made in the commit
 git diff ${COMMIT_HASH}^1..${COMMIT_HASH} > ${PATCH_FILE}
 
-# create branch pointing _before_ commit and aplly the patch
+# create branch pointing _before_ commit and apply the patch
 git checkout master
 git branch -D demo_branch
 git checkout -b demo_branch ${COMMIT_HASH}^1

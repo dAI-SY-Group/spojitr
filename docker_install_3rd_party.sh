@@ -8,7 +8,6 @@ python3 << EOPYTHON
 import nltk
 
 nltk.download("stopwords")
-nltk.download("word_tokenize")
 nltk.download("punkt")
 EOPYTHON
 
@@ -17,7 +16,10 @@ EOPYTHON
 
 ## weka
 cd /data/tmp
-curl https://netix.dl.sourceforge.net/project/weka/weka-3-8/3.8.3/weka-3-8-3.zip -O
+
+# the SSL certificate has expired, thus we need to turn off the check with '-k'
+#    see: https://curl.haxx.se/docs/sslcerts.html
+curl -k https://netix.dl.sourceforge.net/project/weka/weka-3-8/3.8.3/weka-3-8-3.zip -O
 unzip weka-3-8-3.zip
 cp weka-3-8-3/weka.jar /data/spojitr_install/3rd/
 
